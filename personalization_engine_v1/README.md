@@ -163,6 +163,7 @@ Two-tab layout:
 | GET | `/api/heatmap` | Session timing heatmap matrix (7×7) |
 | GET | `/api/rules` | Timing rules, segment rules, content matrix |
 | GET | `/api/campaigns` | Rule-based campaign decisions |
+| POST | `/api/simulate` | Run engagement & revenue simulation with custom levers |
 | GET | `/api/export` | Download generated HTML dashboard |
 
 ---
