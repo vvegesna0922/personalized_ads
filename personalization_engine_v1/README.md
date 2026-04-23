@@ -39,7 +39,15 @@ main.py                  ← CLI entry point
 pip install -r requirements.txt
 ```
 
-### 2. Seed the database
+### 2. Set your Anthropic API key (required for Strategy Chat)
+
+```bash
+export ANTHROPIC_API_KEY=your_key_here
+```
+
+The rest of the engine is fully deterministic and works without this. Only the Strategy Chat tab calls the Anthropic API.
+
+### 4. Seed the database
 
 The database file (`customers.db`) is not included in the repo. Generate it from the sample data:
 
@@ -49,7 +57,7 @@ python data/seed.py
 
 This creates `customers.db` with 40 customers spread across all 6 behavioral segments.
 
-### 3. Start the server
+### 5. Start the server
 
 ```bash
 python main.py --serve
@@ -58,7 +66,7 @@ python main.py --serve
 - **Dashboard** → http://localhost:8000/dashboard
 - **API docs** → http://localhost:8000/docs
 
-### 4. Export a static dashboard (no server needed)
+### 6. Export a static dashboard (no server needed)
 
 ```bash
 python main.py --export
@@ -127,7 +135,7 @@ Each predicted segment maps to a recommended marketing strategy:
 
 ## Dashboard
 
-Two-tab layout:
+Three-tab layout:
 
 ### Metrics tab
 - Overview KPIs: total customers, average AOV, engagement score, sale dependency
@@ -149,6 +157,13 @@ Two-tab layout:
   - Confidence bar with color coding
   - Drift warning if predicted ≠ assigned segment
 
+### Strategy Chat tab
+- Describe any customer in plain language and get an instant segment classification + strategy recommendation
+- Powered by Claude (Haiku) via the Anthropic API — parses natural language into structured behavioral attributes, then runs them through the deterministic prediction engine
+- Clickable example prompts to get started quickly
+- Response shows: interpreted profile (timing, AOV, discount usage, categories), predicted segment + confidence, all 6 segment scores, and the full recommended strategy (channel, send time, offer, action)
+- Requires `ANTHROPIC_API_KEY` to be set and the server running (`python main.py --serve`)
+
 ---
 
 ## REST API Reference
@@ -164,6 +179,7 @@ Two-tab layout:
 | GET | `/api/rules` | Timing rules, segment rules, content matrix |
 | GET | `/api/campaigns` | Rule-based campaign decisions |
 | POST | `/api/simulate` | Run engagement & revenue simulation with custom levers |
+| POST | `/api/chat` | Natural-language customer description → segment classification + strategy |
 | GET | `/api/export` | Download generated HTML dashboard |
 
 ---

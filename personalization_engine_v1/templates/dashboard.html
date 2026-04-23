@@ -70,6 +70,7 @@ select{background:#fff;border:0.5px solid #e0dfd8;border-radius:8px;padding:6px 
   <div class="tabs">
     <button class="tab active" onclick="showPanel('metrics',this)">Metrics</button>
     <button class="tab" onclick="showPanel('users',this)">Users &amp; Campaigns</button>
+    <button class="tab" onclick="showPanel('chat',this)">Strategy Chat</button>
   </div>
 
   <!-- ═══════════════ METRICS ═══════════════ -->
@@ -296,6 +297,36 @@ select{background:#fff;border:0.5px solid #e0dfd8;border-radius:8px;padding:6px 
     </div>
 
   </div><!-- /users -->
+
+  <!-- ═══════════════ STRATEGY CHAT ═══════════════ -->
+  <div id="chat" class="panel">
+
+    <div class="card" style="margin-bottom:16px">
+      <div class="section-title">Describe a Customer</div>
+      <p style="font-size:12px;color:#73726c;margin-bottom:12px;line-height:1.6">
+        Describe a customer's shopping behavior in plain language. The engine will classify them into a segment and recommend the best marketing strategy.
+      </p>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">
+        <button class="toggle-btn" onclick="setChatExample(this)">shops late at night, loves streetwear, spends ~$90</button>
+        <button class="toggle-btn" onclick="setChatExample(this)">morning runner, buys athletic gear 4× a month</button>
+        <button class="toggle-btn" onclick="setChatExample(this)">only buys during sales, low basket size</button>
+        <button class="toggle-btn" onclick="setChatExample(this)">high spender, rarely shops, buys formal wear on weekends</button>
+        <button class="toggle-btn" onclick="setChatExample(this)">browses at lunch, moderate discounts, free shipping threshold</button>
+      </div>
+      <textarea id="chat-input"
+        placeholder="e.g. a customer who shops late at night, mostly buys streetwear, spends around $80 per order, and rarely uses discounts..."
+        style="width:100%;border:0.5px solid #e0dfd8;border-radius:8px;padding:10px;font-size:13px;font-family:inherit;resize:vertical;min-height:80px;outline:none;color:#1a1a1a;background:#fff"></textarea>
+      <div style="display:flex;justify-content:flex-end;margin-top:8px">
+        <button onclick="submitChat()" id="chat-submit"
+          style="background:#1a1a1a;color:#fff;border:none;border-radius:8px;padding:8px 20px;font-size:13px;cursor:pointer;font-family:inherit">
+          Analyze →
+        </button>
+      </div>
+    </div>
+
+    <div id="chat-response"></div>
+
+  </div><!-- /chat -->
 
 </div><!-- /app -->
 
@@ -527,6 +558,124 @@ function startLiveTick() {
 
 buildCustomerList();
 startLiveTick();
+
+// ── Strategy Chat ─────────────────────────────────────────────────────────────
+
+function setChatExample(btn) {
+  document.getElementById('chat-input').value = btn.textContent.trim();
+}
+
+async function submitChat() {
+  const input = document.getElementById('chat-input').value.trim();
+  if (!input) return;
+
+  const btn    = document.getElementById('chat-submit');
+  const resEl  = document.getElementById('chat-response');
+  btn.textContent = 'Analyzing…';
+  btn.disabled = true;
+  resEl.innerHTML = '';
+
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({message: input}),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({detail: res.statusText}));
+      throw new Error(err.detail || res.statusText);
+    }
+    renderChatResponse(await res.json());
+  } catch (e) {
+    resEl.innerHTML = `
+      <div class="card" style="border-color:#f5c6c6;background:#FCEBEB">
+        <div style="color:#A32D2D;font-size:13px">
+          <strong>Error:</strong> ${e.message}<br>
+          <span style="font-size:11px;margin-top:4px;display:block">Make sure the server is running and ANTHROPIC_API_KEY is set.</span>
+        </div>
+      </div>`;
+  } finally {
+    btn.textContent = 'Analyze →';
+    btn.disabled = false;
+  }
+}
+
+function renderChatResponse(data) {
+  const el   = document.getElementById('chat-response');
+  const p    = data.prediction;
+  const prof = data.interpreted_profile;
+
+  const scoreRows = Object.entries(p.all_scores)
+    .sort((a, b) => b[1] - a[1])
+    .map(([seg, score]) => `
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <span style="font-size:11px;color:#73726c;min-width:140px">${seg}</span>
+        <div class="bar-bg" style="flex:1">
+          <div class="bar-fill" style="width:${score}%;background:#534AB7"></div>
+        </div>
+        <span style="font-size:11px;font-weight:500;min-width:30px;text-align:right">${score}</span>
+      </div>`).join('');
+
+  const categoryBadges = prof.categories.length
+    ? prof.categories.map(c => `<span class="badge badge-purple">${c}</span>`).join('')
+    : '<span class="badge badge-gray">unspecified</span>';
+
+  el.innerHTML = `
+  <div class="card">
+    <div style="font-size:12px;color:#73726c;font-style:italic;margin-bottom:12px;line-height:1.6">
+      "${data.interpretation}"
+    </div>
+
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px">
+      <span class="badge badge-gray">⏰ ${prof.timing.replace('_', ' ')}</span>
+      <span class="badge badge-gray">💰 $${prof.avg_order_value} AOV</span>
+      <span class="badge badge-gray">🏷 ${prof.discount_usage}% discounts</span>
+      <span class="badge badge-gray">📦 ${prof.purchase_freq}×/mo</span>
+      ${categoryBadges}
+    </div>
+
+    <div class="grid-2" style="margin-bottom:16px">
+      <div>
+        <div class="section-title">Predicted Segment</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span class="badge badge-purple" style="font-size:12px;padding:4px 10px">${p.predicted_segment}</span>
+          <span style="font-size:11px;font-weight:500;color:${confColor(p.confidence)}">${p.confidence}% confidence</span>
+        </div>
+        <div class="conf-bar" style="margin-bottom:10px">
+          <div class="conf-fill" style="width:${p.confidence}%;background:${confColor(p.confidence)}"></div>
+        </div>
+        <div style="font-size:11px;color:#73726c;line-height:1.6">${p.rationale}</div>
+      </div>
+      <div>
+        <div class="section-title">Segment Score Breakdown</div>
+        ${scoreRows}
+      </div>
+    </div>
+
+    <div style="border-top:0.5px solid #e0dfd8;padding-top:14px">
+      <div class="section-title">Recommended Strategy</div>
+      <div style="background:#f5f4f0;border-radius:10px;padding:12px">
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">
+          <div style="text-align:center;background:#fff;border-radius:8px;padding:8px">
+            <div style="font-size:10px;color:#73726c;margin-bottom:2px">Channel</div>
+            <div style="font-size:12px;font-weight:500">${p.best_channel}</div>
+          </div>
+          <div style="text-align:center;background:#fff;border-radius:8px;padding:8px">
+            <div style="font-size:10px;color:#73726c;margin-bottom:2px">Send Time</div>
+            <div style="font-size:12px;font-weight:500">${p.best_send_time}</div>
+          </div>
+          <div style="text-align:center;background:#fff;border-radius:8px;padding:8px">
+            <div style="font-size:10px;color:#73726c;margin-bottom:2px">Offer</div>
+            <div style="font-size:12px;font-weight:500">${p.offer}</div>
+          </div>
+        </div>
+        <div style="font-size:12px;color:#73726c;line-height:1.7">${p.action}</div>
+      </div>
+    </div>
+  </div>`;
+
+  el.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+}
 </script>
 </body>
 </html>
