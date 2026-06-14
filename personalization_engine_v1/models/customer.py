@@ -176,7 +176,7 @@ class CustomerPrediction(_Serialisable):
     action:            str            # full recommended marketing action
     rationale:         str            # which signals drove the prediction
     all_scores:        dict           # {segment_value: score} for transparency
-
+    drift_explanation: Optional[str] = None   # Claude-generated insight for drifted customers
 
 # ── Campaign decision ─────────────────────────────────────────────────────────
 

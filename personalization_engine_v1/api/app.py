@@ -29,12 +29,15 @@ from typing import Optional
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
+from dotenv import load_dotenv
+load_dotenv(ROOT / ".env")
+
 from fastapi import FastAPI, Query, HTTPException
 from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel as PydanticBase, Field
 
-from data.db import CUSTOMERS
+from data.seed import CUSTOMERS
 from engine.profiler import build_dashboard, run_simulation
 from engine.html_generator import render_dashboard
 from models.customer import (

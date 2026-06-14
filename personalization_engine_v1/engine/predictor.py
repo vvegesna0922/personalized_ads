@@ -12,6 +12,7 @@ No external APIs — pure deterministic scoring.
 """
 
 from __future__ import annotations
+import os
 from models.customer import (
     CustomerProfile, CustomerPrediction,
     Segment, Channel, SessionTiming, Category,
@@ -219,6 +220,70 @@ def _build_rationale(c: CustomerProfile, seg: Segment) -> str:
     return "Signals: " + ", ".join(parts) + "." if parts else "Based on overall behavioral signals."
 
 
+def _format_score_breakdown(scores: dict[Segment, float]) -> str:
+    return ", ".join(
+        f"{seg.value}: {score:.1f}" for seg, score in sorted(scores.items(), key=lambda item: item[1], reverse=True)
+    )
+
+
+def _synthesize_drift_explanation(
+    c: CustomerProfile,
+    best_seg: Segment,
+    scores: dict[Segment, float],
+) -> str | None:
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        return None
+    if best_seg == c.segment:
+        return None
+
+    prompt = f"""
+The customer is currently assigned to the segment '{c.segment.value}' but the classifier now predicts '{best_seg.value}'.
+
+Customer behavior:
+- timing: {c.timing.value}
+- session_hours: {c.session_hours}
+- avg_order_value: ${c.avg_order_value:.0f}
+- discount_usage: {c.discount_usage:.2f}
+- purchase_freq: {c.purchase_freq:.1f} per month
+- size_consistent: {c.size_consistent:.2f}
+- engagement_score: {c.engagement_score}
+- categories: {', '.join(cat.value for cat in c.categories) or 'none'}
+
+Segment score breakdown:
+{_format_score_breakdown(scores)}
+
+Rationale for predicted segment:
+{_build_rationale(c, best_seg)}
+
+In one sentence, explain what behavioral change caused this customer to drift from their assigned segment to the predicted segment."
+"""
+
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=api_key)
+        resp = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=120,
+            system=[{
+                "type": "text",
+                "text": (
+                    "You are a retail marketing analyst. Explain behavioral segment drift concisely "
+                    "based on the customer profile and score breakdown."
+                ),
+                "cache_control": {"type": "ephemeral"},
+            }],
+            messages=[{"role": "user", "content": prompt}],
+        )
+        text = "".join(
+            part.text for part in resp.content
+            if getattr(part, "type", None) == "output_text" and getattr(part, "text", None)
+        ).strip()
+        return text or None
+    except Exception:
+        return None
+
+
 # ── Public API ────────────────────────────────────────────────────────────────
 
 def predict_customer(c: CustomerProfile) -> CustomerPrediction:
@@ -245,6 +310,7 @@ def predict_customer(c: CustomerProfile) -> CustomerPrediction:
         action            = strat["action"],
         rationale         = _build_rationale(c, best_seg),
         all_scores        = {seg.value: round(score, 1) for seg, score in scores.items()},
+        drift_explanation = _synthesize_drift_explanation(c, best_seg, scores),
     )
 
 

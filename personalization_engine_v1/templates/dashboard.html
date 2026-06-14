@@ -360,6 +360,7 @@ const CUSTOMERS = [
     offer: {{ predictions[c.id].offer | tojson }},
     action: {{ predictions[c.id].action | tojson }},
     rationale: {{ predictions[c.id].rationale | tojson }},
+    driftExplanation: {{ predictions[c.id].drift_explanation | tojson }},
     allScores: {{ predictions[c.id].all_scores | tojson }},
   }{% if not loop.last %},{% endif %}
   {% endfor %}
@@ -405,7 +406,7 @@ function buildCustomerList() {
     ? '<div style="text-align:center;padding:20px;color:#73726c;font-size:13px">No customers match this filter.</div>'
     : list.map(c => `
     <div class="customer-row" onclick="showDetail(${c.id})">
-      <div class="avatar" style="background:${c.color}22;color:${c.color}">${c.initials}</div>
+      <div class="avatar" data-bg-color="${c.color}22" data-color="${c.color}">${c.initials}</div>
       <div style="flex:1;min-width:0">
         <div style="font-weight:500;font-size:13px">${c.name}</div>
         <div style="font-size:11px;color:#73726c">${c.segment}</div>
@@ -417,9 +418,9 @@ function buildCustomerList() {
       <div style="min-width:90px">
         <div style="display:flex;align-items:center;gap:6px">
           <div class="bar-bg" style="width:60px">
-            <div class="bar-fill" style="width:${c.score}%;background:${scoreColor(c.score)}"></div>
+            <div class="bar-fill" data-width="${c.score}" data-bg="${scoreColor(c.score)}"></div>
           </div>
-          <span style="font-size:12px;font-weight:500;color:${scoreColor(c.score)}">${c.score}</span>
+          <span style="font-size:12px;font-weight:500" data-color="${scoreColor(c.score)}">${c.score}</span>
         </div>
       </div>
       <div style="min-width:90px;text-align:right">
@@ -429,6 +430,23 @@ function buildCustomerList() {
         <div style="font-size:10px;color:#73726c;margin-top:2px">${c.confidence}% conf.</div>
       </div>
     </div>`).join('');
+  applyDynamicStyles(document.getElementById('customer-list'));
+}
+
+function applyDynamicStyles(node) {
+  if (!node) return;
+  node.querySelectorAll('[data-bg-color]').forEach(el => {
+    if (el.dataset.bgColor) el.style.background = el.dataset.bgColor;
+  });
+  node.querySelectorAll('[data-color]').forEach(el => {
+    if (el.dataset.color) el.style.color = el.dataset.color;
+  });
+  node.querySelectorAll('[data-width]').forEach(el => {
+    if (el.dataset.width != null) el.style.width = `${el.dataset.width}%`;
+  });
+  node.querySelectorAll('[data-bg]').forEach(el => {
+    if (el.dataset.bg) el.style.background = el.dataset.bg;
+  });
 }
 
 function showDetail(id) {
@@ -441,7 +459,7 @@ function showDetail(id) {
       <span style="font-weight:500">⚠ Behavioral Drift Detected</span> —
       This customer is assigned to <strong>${c.segment}</strong> but their signals
       most closely match <strong>${c.predictedSegment}</strong>.
-      Consider re-segmenting or testing a different strategy.
+      ${c.driftExplanation ? `<div style="margin-top:8px;color:#5c4b18">${c.driftExplanation}</div>` : 'Consider re-segmenting or testing a different strategy.'}
     </div>` : '';
 
   const scoreRows = Object.entries(c.allScores)
@@ -451,7 +469,7 @@ function showDetail(id) {
         <span style="font-size:11px;color:#73726c;min-width:140px">${seg}</span>
         <div style="flex:1;margin:0 8px">
           <div class="bar-bg">
-            <div class="bar-fill" style="width:${score}%;background:#534AB7"></div>
+            <div class="bar-fill" data-width="${score}" style="background:#534AB7"></div>
           </div>
         </div>
         <span style="font-size:11px;font-weight:500;min-width:30px;text-align:right">${score}</span>
@@ -460,11 +478,11 @@ function showDetail(id) {
   el.innerHTML = `
   <div class="card">
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
-      <div class="avatar" style="width:44px;height:44px;background:${c.color}22;color:${c.color};font-size:14px">${c.initials}</div>
+      <div class="avatar" data-bg-color="${c.color}22" data-color="${c.color}" style="width:44px;height:44px;font-size:14px">${c.initials}</div>
       <div>
         <div style="font-size:16px;font-weight:500">${c.name}</div>
         <div style="font-size:12px;color:#73726c">${c.segment} · Engagement score
-          <span style="font-weight:500;color:${scoreColor(c.score)}">${c.score}/100</span>
+          <span style="font-weight:500" data-color="${scoreColor(c.score)}">${c.score}/100</span>
         </div>
       </div>
     </div>
@@ -501,9 +519,9 @@ function showDetail(id) {
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
           <span class="badge badge-purple">${c.predictedSegment}</span>
           <div style="flex:1">
-            <div class="conf-bar"><div class="conf-fill" style="width:${c.confidence}%;background:${confColor(c.confidence)}"></div></div>
+            <div class="conf-bar"><div class="conf-fill" data-width="${c.confidence}" data-bg="${confColor(c.confidence)}"></div></div>
           </div>
-          <span style="font-size:11px;font-weight:500;color:${confColor(c.confidence)}">${c.confidence}% confidence</span>
+          <span style="font-size:11px;font-weight:500" data-color="${confColor(c.confidence)}">${c.confidence}% confidence</span>
         </div>
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">
           <div style="text-align:center;background:#fff;border-radius:8px;padding:8px">
@@ -611,7 +629,7 @@ function renderChatResponse(data) {
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
         <span style="font-size:11px;color:#73726c;min-width:140px">${seg}</span>
         <div class="bar-bg" style="flex:1">
-          <div class="bar-fill" style="width:${score}%;background:#534AB7"></div>
+          <div class="bar-fill" data-width="${score}" style="background:#534AB7"></div>
         </div>
         <span style="font-size:11px;font-weight:500;min-width:30px;text-align:right">${score}</span>
       </div>`).join('');
@@ -639,10 +657,10 @@ function renderChatResponse(data) {
         <div class="section-title">Predicted Segment</div>
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
           <span class="badge badge-purple" style="font-size:12px;padding:4px 10px">${p.predicted_segment}</span>
-          <span style="font-size:11px;font-weight:500;color:${confColor(p.confidence)}">${p.confidence}% confidence</span>
+          <span style="font-size:11px;font-weight:500" data-color="${confColor(p.confidence)}">${p.confidence}% confidence</span>
         </div>
         <div class="conf-bar" style="margin-bottom:10px">
-          <div class="conf-fill" style="width:${p.confidence}%;background:${confColor(p.confidence)}"></div>
+          <div class="conf-fill" data-width="${p.confidence}" data-bg="${confColor(p.confidence)}"></div>
         </div>
         <div style="font-size:11px;color:#73726c;line-height:1.6">${p.rationale}</div>
       </div>
@@ -673,6 +691,7 @@ function renderChatResponse(data) {
       </div>
     </div>
   </div>`;
+  applyDynamicStyles(el);
 
   el.scrollIntoView({behavior: 'smooth', block: 'nearest'});
 }

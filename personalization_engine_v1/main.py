@@ -35,7 +35,7 @@ from pathlib import Path
 ROOT = Path(__file__).parent
 sys.path.insert(0, str(ROOT))
 
-from data.db import CUSTOMERS
+from data.seed import CUSTOMERS
 from engine.profiler import build_dashboard, SimulationInputs
 from engine.html_generator import render_dashboard
 
