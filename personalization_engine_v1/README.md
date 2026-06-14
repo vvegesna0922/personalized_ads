@@ -1,6 +1,10 @@
 # Behavioral Personalization Engine
 
-A Python backend that ingests customer shopping activity from a SQLite database, builds dynamic behavioral profiles, and uses a rule-based prediction engine to classify customers into segments and recommend targeted marketing strategies. Includes a self-contained two-tab interactive dashboard — no frontend build step required.
+This is a tool for understanding which types of ads will resonate with which customers and why.
+
+Feed it customer data (purchase history, session timing, spend patterns, category preferences) and it classifies each customer into a behavioral segment, then recommends the right ad format, channel, send time, and offer type for that person. The goal is to move away from one-size-fits-all campaigns toward ads that feel relevant: a late-night streetwear browser gets a limited-drop push notification at 10pm; a sale-only shopper gets an SMS flash deal on payday.
+
+Under the hood: a Python backend with a rule-based prediction engine that scores customers across 6 behavioral segments and maps each to a targeting strategy. Includes a natural-language chat interface (powered by Claude) where you can describe a customer in plain English and instantly see what ad approach would work best for them. Ships with an interactive dashboard — no frontend build step required.
 
 ---
 
@@ -41,13 +45,17 @@ pip install -r requirements.txt
 
 ### 2. Set your Anthropic API key (required for Strategy Chat)
 
+Create a `.env` file in the project root:
+
 ```bash
-export ANTHROPIC_API_KEY=your_key_here
+ANTHROPIC_API_KEY=your_key_here
 ```
 
-The rest of the engine is fully deterministic and works without this. Only the Strategy Chat tab calls the Anthropic API.
+The server loads this automatically via `python-dotenv` — no need to `export` manually. The rest of the engine is fully deterministic and works without this key. Only the Strategy Chat tab calls the Anthropic API.
 
-### 4. Seed the database
+> **Security:** add `.env` to your `.gitignore` so the key is never committed.
+
+### 3. Seed the database
 
 The database file (`customers.db`) is not included in the repo. Generate it from the sample data:
 
@@ -57,7 +65,7 @@ python data/seed.py
 
 This creates `customers.db` with 40 customers spread across all 6 behavioral segments.
 
-### 5. Start the server
+### 4. Start the server
 
 ```bash
 python main.py --serve
@@ -66,7 +74,7 @@ python main.py --serve
 - **Dashboard** → http://localhost:8000/dashboard
 - **API docs** → http://localhost:8000/docs
 
-### 6. Export a static dashboard (no server needed)
+### 5. Export a static dashboard (no server needed)
 
 ```bash
 python main.py --export
