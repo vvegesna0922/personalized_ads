@@ -22,6 +22,7 @@ models/
 engine/
 ├── profiler.py          ← KPIs, segment summaries, rule engine, dashboard builder
 ├── predictor.py         ← Rule-based segment classifier + strategy recommender
+├── llm_classifier.py    ← LLM shopping-type classifier from raw behavior
 └── html_generator.py    ← Jinja2 renderer → self-contained HTML
 
 api/
@@ -51,7 +52,7 @@ Create a `.env` file in the project root:
 ANTHROPIC_API_KEY=your_key_here
 ```
 
-The server loads this automatically via `python-dotenv` — no need to `export` manually. The rest of the engine is fully deterministic and works without this key. Only the Strategy Chat tab calls the Anthropic API.
+The server loads this automatically via `python-dotenv` — no need to `export` manually. The deterministic rules, dashboard, and simulation work without this key. Strategy Chat and LLM shopping-type classification call the Anthropic API.
 
 > **Security:** add `.env` to your `.gitignore` so the key is never committed.
 
@@ -126,6 +127,42 @@ where `gap` = best score − second-best score. High confidence requires both a 
 
 When a customer's predicted segment differs from their assigned segment, they are flagged as **drifted**. The dashboard surfaces these customers for potential re-segmentation.
 
+### LLM Shopping-Type Classification
+
+`engine/llm_classifier.py` classifies a customer from behavioral facts and product signals without using a pre-filled segment as input. This is useful when the shopping type should be inferred from data instead of manually assigned.
+
+Input shape:
+
+```json
+{
+  "active_hours": [21, 22, 23],
+  "purchase_freq": 2.8,
+  "avg_order_value": 92,
+  "discount_usage": 0.18,
+  "size_consistent": 0.86,
+  "engagement_score": 72,
+  "product_signals": ["sneakers", "hoodies", "streetwear drops"],
+  "recent_items": ["black hoodie", "limited sneaker"]
+}
+```
+
+Output shape:
+
+```json
+{
+  "shopping_type": "Night Streetwear",
+  "confidence": 0.86,
+  "primary_category": "streetwear",
+  "price_sensitivity": "medium",
+  "best_channel": "Push",
+  "best_send_time": "10pm",
+  "evidence": ["Most active hours are late evening/night", "Product signals indicate streetwear"],
+  "recommended_action": "Send a late-night drop alert with early-access framing."
+}
+```
+
+The API validates the LLM's output against fixed enums and includes an `Unclear` shopping type for thin or contradictory data.
+
 ### Strategy Recommendations
 
 Each predicted segment maps to a recommended marketing strategy:
@@ -157,6 +194,7 @@ Three-tab layout:
 - All 40 customers with segment, AOV, engagement, discount usage
 - **Match / Drift badge** per customer (predicted vs assigned segment)
 - Confidence % for each prediction
+- Per-customer LLM shopping-type classifier using behavior and product signals rather than assigned segment
 - Filter: "Show drift only" toggle
 - Sort by: Name, AOV, Engagement, Discount, Confidence
 - Per-customer detail panel:
@@ -182,11 +220,13 @@ Three-tab layout:
 | GET | `/api/overview` | KPI metrics |
 | GET | `/api/customers` | Customer list — filterable by segment, sortable |
 | GET | `/api/customers/{id}` | Single customer profile |
+| GET | `/api/customers/{id}/llm-classification` | LLM shopping-type classification for one customer |
 | GET | `/api/segments` | Segment distribution summaries |
 | GET | `/api/heatmap` | Session timing heatmap matrix (7×7) |
 | GET | `/api/rules` | Timing rules, segment rules, content matrix |
 | GET | `/api/campaigns` | Rule-based campaign decisions |
 | POST | `/api/simulate` | Run engagement & revenue simulation with custom levers |
+| POST | `/api/classify-shopping-type` | LLM classification from raw behavioral data |
 | POST | `/api/chat` | Natural-language customer description → segment classification + strategy |
 | GET | `/api/export` | Download generated HTML dashboard |
 

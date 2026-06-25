@@ -24,7 +24,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
@@ -40,6 +40,7 @@ from pydantic import BaseModel as PydanticBase, Field
 from data.seed import CUSTOMERS
 from engine.profiler import build_dashboard, run_simulation
 from engine.html_generator import render_dashboard
+from engine.llm_classifier import CustomerBehaviorFeatures, classify_customer_with_llm
 from models.customer import (
     SimulationInputs, CustomerProfile, Segment, SessionTiming, Category,
 )
@@ -57,6 +58,20 @@ class SimulationRequest(PydanticBase):
 
 class ChatRequest(PydanticBase):
     message: str = Field(..., min_length=1, max_length=2000)
+
+
+class CustomerBehaviorClassificationRequest(PydanticBase):
+    customer_id: Optional[int] = None
+    active_hours: list[int] = Field(default_factory=list)
+    purchase_freq: float = Field(0, ge=0)
+    avg_order_value: float = Field(0, ge=0)
+    discount_usage: float = Field(0, ge=0, le=1)
+    size_consistent: float = Field(0, ge=0, le=1)
+    engagement_score: int = Field(0, ge=0, le=100)
+    product_signals: list[str] = Field(default_factory=list)
+    recent_items: list[str] = Field(default_factory=list)
+    channel_metrics: dict[str, Any] = Field(default_factory=dict)
+    notes: Optional[str] = Field(None, max_length=1000)
 
 
 # ── Chat helpers ──────────────────────────────────────────────────────────────
@@ -174,6 +189,21 @@ def api_customer(customer_id: int):
     return c.to_dict()
 
 
+@app.get(
+    "/api/customers/{customer_id}/llm-classification",
+    summary="LLM shopping type classification for a customer",
+    tags=["Customers", "LLM"],
+)
+def api_customer_llm_classification(customer_id: int):
+    c = next((c for c in CUSTOMERS if c.id == customer_id), None)
+    if not c:
+        raise HTTPException(status_code=404, detail=f"Customer {customer_id} not found")
+    try:
+        return classify_customer_with_llm(CustomerBehaviorFeatures.from_customer(c))
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+
+
 @app.get("/api/segments", summary="Segment summaries", tags=["Analytics"])
 def api_segments():
     return [s.to_dict() for s in build_dashboard(CUSTOMERS).segments]
@@ -208,6 +238,31 @@ def api_simulate(body: SimulationRequest):
         content_personalization=body.content_personalization,
     )
     return run_simulation(inputs).to_dict()
+
+
+@app.post(
+    "/api/classify-shopping-type",
+    summary="Classify shopping type from raw behavioral data",
+    tags=["LLM"],
+)
+def api_classify_shopping_type(body: CustomerBehaviorClassificationRequest):
+    features = CustomerBehaviorFeatures(
+        customer_id=body.customer_id,
+        active_hours=body.active_hours,
+        purchase_freq=body.purchase_freq,
+        avg_order_value=body.avg_order_value,
+        discount_usage=body.discount_usage,
+        size_consistent=body.size_consistent,
+        engagement_score=body.engagement_score,
+        product_signals=body.product_signals,
+        recent_items=body.recent_items,
+        channel_metrics=body.channel_metrics,
+        notes=body.notes,
+    )
+    try:
+        return classify_customer_with_llm(features)
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
 
 
 @app.get("/api/export", summary="Download generated HTML dashboard", tags=["Dashboard"])
